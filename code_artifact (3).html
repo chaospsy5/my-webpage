@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>가압경수형(PWR) 원자로 인터랙티브 탐험</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 커스텀 애니메이션 및 스타일 */
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif; }
+        
+        .svg-interactive {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .svg-interactive:hover {
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8)) brightness(1.2);
+        }
+
+        .selected {
+            filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.9)) brightness(1.3);
+            stroke: #60a5fa;
+            stroke-width: 3px;
+        }
+
+        /* 붉은 에너지(열) 맥동 애니메이션 */
+        @keyframes pulse-heat {
+            0% { transform: scale(0.95); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(0.95); }
+        }
+
+        #heat-glow {
+            transform-origin: 250px 480px; /* 원자로 노심 중심 */
+            animation: pulse-heat 2s infinite ease-in-out;
+            transition: opacity 0.3s ease, animation-duration 0.3s ease;
+        }
+
+        /* 냉각재 흐름(기포) 애니메이션 */
+        @keyframes float-up {
+            0% { transform: translateY(0); opacity: 0; }
+            50% { opacity: 0.6; }
+            100% { transform: translateY(-300px); opacity: 0; }
+        }
+
+        .bubble {
+            animation: float-up 3s infinite linear;
+        }
+
+        /* RCS 배관 흐름 애니메이션 (좌/우 방향 분리) */
+        @keyframes flow-move-right {
+            0% { transform: translateX(-10px); opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { transform: translateX(15px); opacity: 0; }
+        }
+        @keyframes flow-move-left {
+            0% { transform: translateX(10px); opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { transform: translateX(-15px); opacity: 0; }
+        }
+        .flow-right {
+            animation: flow-move-right linear infinite;
+        }
+        .flow-left {
+            animation: flow-move-left linear infinite;
+        }
+
+        /* RCP 임펠러 회전 애니메이션 */
+        @keyframes spin-impeller {
+            100% { transform: rotate(360deg); }
+        }
+        .impeller {
+            animation: spin-impeller 0.5s linear infinite;
+        }
+
+        /* 우라늄 펠렛 CSS 그래픽 애니메이션 */
+        @keyframes pellet-glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.9); }
+        }
+
+        .pellet {
+            background: linear-gradient(135deg, #4b5563, #9ca3af, #4b5563);
+            animation: pellet-glow 2s infinite ease-in-out;
+        }
+        
+        /* 과출력 경고 진동 애니메이션 */
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(-2px, 1px) rotate(-0.5deg); }
+            50% { transform: translate(2px, -1px) rotate(0.5deg); }
+            75% { transform: translate(-1px, -1px) rotate(-0.5deg); }
+        }
+        
+        .danger-shake {
+            animation: shake 0.3s infinite;
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.6) !important;
+        }
+
+        /* 슬라이더 커스텀 디자인 */
+        input[type=range] {
+            -webkit-appearance: none; 
+            appearance: none;
+            width: 100%; 
+            background: transparent; 
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #ef4444;
+            cursor: pointer;
+            margin-top: -10px;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+            border: 2px solid #fff;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #4b5563;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center overflow-hidden">
+
+    <!-- 메인 컨테이너 -->
+    <div class="max-w-6xl w-full h-[90vh] bg-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-gray-700" id="main-container">
+        
+        <!-- 좌측: 원자로 인터랙티브 뷰어 (60%) -->
+        <div class="w-full md:w-[60%] h-full relative bg-gray-900 p-6 flex flex-col items-center justify-center">
+            <h2 class="absolute top-6 left-6 text-2xl font-bold text-gray-300 tracking-wide">
+                PWR Reactor Core
+                <span class="block text-sm font-normal text-gray-500 mt-1">가압경수형 원자로 내부 구조</span>
+            </h2>
+
+            <!-- SVG 다이어그램 -->
+            <svg viewBox="0 0 500 700" class="w-full h-full max-h-[700px] mt-8">
+                <defs>
+                    <!-- 열(에너지) 그라데이션 -->
+                    <radialGradient id="heat-grad" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#ef4444" stop-opacity="1" />
+                        <stop offset="40%" stop-color="#f97316" stop-opacity="0.8" />
+                        <stop offset="100%" stop-color="#ef4444" stop-opacity="0" />
+                    </radialGradient>
+                    
+                    <!-- 원자로 용기 질감 -->
+                    <linearGradient id="vessel-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#475569" />
+                        <stop offset="20%" stop-color="#94a3b8" />
+                        <stop offset="80%" stop-color="#64748b" />
+                        <stop offset="100%" stop-color="#334155" />
+                    </linearGradient>
+
+                    <!-- 냉각재 그라데이션 -->
+                    <linearGradient id="water-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.4" />
+                        <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.7" />
+                    </linearGradient>
+
+                    <!-- 입체감을 위한 방향별 배관 그라데이션 -->
+                    <linearGradient id="hot-water-grad-l" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stop-color="#ef4444" stop-opacity="0.8" />
+                        <stop offset="100%" stop-color="#f97316" stop-opacity="0.9" />
+                    </linearGradient>
+                    <linearGradient id="hot-water-grad-r" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#ef4444" stop-opacity="0.8" />
+                        <stop offset="100%" stop-color="#f97316" stop-opacity="0.9" />
+                    </linearGradient>
+                    <linearGradient id="water-grad-l" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.7" />
+                        <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.9" />
+                    </linearGradient>
+                    <linearGradient id="water-grad-r" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.7" />
+                        <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.9" />
+                    </linearGradient>
+                </defs>
+
+                <!-- 1. 원자로 압력 용기 (배경) -->
+                <path d="M 120 100 L 120 550 A 130 130 0 0 0 380 550 L 380 100 Z" fill="url(#vessel-grad)" stroke="#1e293b" stroke-width="8" />
+                
+                <!-- [뒤쪽 레이어] 저온관 및 RCP 2개 (좌/우) -->
+                <g id="part-rcp-back" class="svg-interactive" onclick="selectPart('rcp')">
+                    <!-- 1. Left Back Cold Leg -->
+                    <rect x="30" y="210" width="95" height="26" fill="#1e3a8a" stroke="#0f172a" stroke-width="4" />
+                    <rect x="40" y="190" width="26" height="34" rx="4" fill="#334155" stroke="#0f172a" stroke-width="3" />
+                    <circle cx="53" cy="223" r="10" fill="#64748b" stroke="#0f172a" stroke-width="2" />
+                    <g class="impeller" style="transform-origin: 53px 223px;">
+                        <line x1="53" y1="223" x2="53" y2="213" stroke="#0f172a" stroke-width="2" />
+                        <line x1="53" y1="223" x2="62" y2="228" stroke="#0f172a" stroke-width="2" />
+                        <line x1="53" y1="223" x2="44" y2="228" stroke="#0f172a" stroke-width="2" />
+                    </g>
+                    <g class="flow-arrow flow-right" style="animation-duration: 1s;">
+                        <path d="M 70 223 L 90 223 M 85 218 L 90 223 L 85 228" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.7"/>
+                    </g>
+
+                    <!-- 2. Right Back Cold Leg -->
+                    <rect x="375" y="210" width="95" height="26" fill="#1e3a8a" stroke="#0f172a" stroke-width="4" />
+                    <rect x="434" y="190" width="26" height="34" rx="4" fill="#334155" stroke="#0f172a" stroke-width="3" />
+                    <circle cx="447" cy="223" r="10" fill="#64748b" stroke="#0f172a" stroke-width="2" />
+                    <g class="impeller" style="transform-origin: 447px 223px;">
+                        <line x1="447" y1="223" x2="447" y2="213" stroke="#0f172a" stroke-width="2" />
+                        <line x1="447" y1="223" x2="456" y2="228" stroke="#0f172a" stroke-width="2" />
+                        <line x1="447" y1="223" x2="438" y2="228" stroke="#0f172a" stroke-width="2" />
+                    </g>
+                    <g class="flow-arrow flow-left" style="animation-duration: 1s;">
+                        <path d="M 430 223 L 410 223 M 415 218 L 410 223 L 415 228" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.7"/>
+                    </g>
+                </g>
+
+                <!-- [중간 레이어] 고온관 2개 (좌/우 출구) -->
+                <g id="part-hotleg" class="svg-interactive" onclick="selectPart('hotleg')">
+                    <!-- 1. Left Hot Leg -->
+                    <rect x="10" y="150" width="115" height="42" fill="url(#hot-water-grad-l)" stroke="#1e293b" stroke-width="6" />
+                    <g class="flow-arrow flow-left" style="animation-duration: 1s;">
+                        <path d="M 90 171 L 60 171 M 70 161 L 60 171 L 70 181" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.9"/>
+                    </g>
+
+                    <!-- 2. Right Hot Leg -->
+                    <rect x="375" y="150" width="115" height="42" fill="url(#hot-water-grad-r)" stroke="#1e293b" stroke-width="6" />
+                    <g class="flow-arrow flow-right" style="animation-duration: 1s;">
+                        <path d="M 410 171 L 440 171 M 430 161 L 440 171 L 430 181" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.9"/>
+                    </g>
+                </g>
+
+                <!-- [앞쪽 레이어] 저온관 및 RCP 2개 (좌/우) -->
+                <g id="part-rcp-front" class="svg-interactive" onclick="selectPart('rcp')">
+                    <!-- 3. Left Front Cold Leg -->
+                    <rect x="10" y="250" width="115" height="38" fill="url(#water-grad-l)" stroke="#1e293b" stroke-width="6" />
+                    <rect x="25" y="220" width="40" height="50" rx="6" fill="#475569" stroke="#1e293b" stroke-width="4" />
+                    <circle cx="45" cy="269" r="16" fill="#94a3b8" stroke="#1e293b" stroke-width="3" />
+                    <circle cx="45" cy="269" r="4" fill="#1e293b" />
+                    <g class="impeller" style="transform-origin: 45px 269px;">
+                        <line x1="45" y1="269" x2="45" y2="253" stroke="#1e293b" stroke-width="3" />
+                        <line x1="45" y1="269" x2="58" y2="276" stroke="#1e293b" stroke-width="3" />
+                        <line x1="45" y1="269" x2="32" y2="276" stroke="#1e293b" stroke-width="3" />
+                    </g>
+                    <g class="flow-arrow flow-right" style="animation-duration: 1s;">
+                        <path d="M 70 269 L 100 269 M 90 259 L 100 269 L 90 279" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.9"/>
+                    </g>
+
+                    <!-- 4. Right Front Cold Leg -->
+                    <rect x="375" y="250" width="115" height="38" fill="url(#water-grad-r)" stroke="#1e293b" stroke-width="6" />
+                    <rect x="435" y="220" width="40" height="50" rx="6" fill="#475569" stroke="#1e293b" stroke-width="4" />
+                    <circle cx="455" cy="269" r="16" fill="#94a3b8" stroke="#1e293b" stroke-width="3" />
+                    <circle cx="455" cy="269" r="4" fill="#1e293b" />
+                    <g class="impeller" style="transform-origin: 455px 269px;">
+                        <line x1="455" y1="269" x2="455" y2="253" stroke="#1e293b" stroke-width="3" />
+                        <line x1="455" y1="269" x2="468" y2="276" stroke="#1e293b" stroke-width="3" />
+                        <line x1="455" y1="269" x2="442" y2="276" stroke="#1e293b" stroke-width="3" />
+                    </g>
+                    <g class="flow-arrow flow-left" style="animation-duration: 1s;">
+                        <path d="M 430 269 L 400 269 M 410 259 L 400 269 L 410 279" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.9"/>
+                    </g>
+                </g>
+
+                <!-- 2. 냉각재 (물) -->
+                <g id="part-coolant" class="svg-interactive" onclick="selectPart('coolant')">
+                    <path d="M 130 110 L 130 545 A 120 120 0 0 0 370 545 L 370 110 Z" fill="url(#water-grad)" />
+                    <!-- 기포 효과 (냉각재) -->
+                    <circle cx="180" cy="500" r="4" fill="#93c5fd" class="bubble" style="animation-delay: 0s;" />
+                    <circle cx="250" cy="520" r="6" fill="#93c5fd" class="bubble" style="animation-delay: 1.5s;" />
+                    <circle cx="320" cy="490" r="5" fill="#93c5fd" class="bubble" style="animation-delay: 0.7s;" />
+                </g>
+
+                <!-- 3. 열 에너지 (노심 중심) -->
+                <circle id="heat-glow" cx="250" cy="450" r="140" fill="url(#heat-grad)" opacity="0.5" />
+
+                <!-- 4. 핵연료 집합체 -->
+                <g id="part-fuel" class="svg-interactive" onclick="selectPart('fuel')">
+                    <!-- 중앙 및 주변 연료봉 다발들 -->
+                    <rect x="170" y="320" width="25" height="200" rx="3" fill="#ea580c" stroke="#262626" stroke-width="2" />
+                    <rect x="205" y="320" width="25" height="200" rx="3" fill="#ea580c" stroke="#262626" stroke-width="2" />
+                    <rect x="240" y="320" width="20" height="200" rx="3" fill="#f97316" stroke="#262626" stroke-width="2" /> <!-- 중앙부 -->
+                    <rect x="270" y="320" width="25" height="200" rx="3" fill="#ea580c" stroke="#262626" stroke-width="2" />
+                    <rect x="305" y="320" width="25" height="200" rx="3" fill="#ea580c" stroke="#262626" stroke-width="2" />
+                    
+                    <!-- 집합체 하단 지지대 -->
+                    <rect x="160" y="520" width="180" height="15" rx="2" fill="#475569" stroke="#1e293b" />
+                </g>
+
+                <!-- 제어봉 (슬라이더로 움직일 부분) - 핵연료 위에 그려짐 -->
+                <g id="part-control" class="svg-interactive" onclick="selectPart('control')">
+                    <g id="control-rods-movable" style="transform: translateY(-100px); transition: transform 0.1s linear;">
+                        <!-- 제어봉 연결부 -->
+                        <rect x="165" y="100" width="170" height="10" fill="#94a3b8" stroke="#334155" />
+                        <!-- 개별 제어봉들 (노심 깊숙이 들어가도록 길이 연장) -->
+                        <rect x="178" y="110" width="9" height="230" rx="4" fill="#cbd5e1" stroke="#475569" />
+                        <rect x="213" y="110" width="9" height="230" rx="4" fill="#cbd5e1" stroke="#475569" />
+                        <rect x="245" y="110" width="10" height="230" rx="4" fill="#e2e8f0" stroke="#475569" /> <!-- 중앙 -->
+                        <rect x="278" y="110" width="9" height="230" rx="4" fill="#cbd5e1" stroke="#475569" />
+                        <rect x="313" y="110" width="9" height="230" rx="4" fill="#cbd5e1" stroke="#475569" />
+                    </g>
+                </g>
+
+                <!-- 5. 제어봉 구동부 (상단) - 제어봉이 위로 올라갈 때 가려지도록 맨 위에 배치 -->
+                <g id="drive-mechanism">
+                    <rect x="150" y="50" width="200" height="40" rx="5" fill="#64748b" stroke="#1e293b" stroke-width="3" />
+                    <path d="M 210 50 L 210 20 L 290 20 L 290 50 Z" fill="#94a3b8" stroke="#1e293b" stroke-width="2"/>
+                </g>
+            </svg>
+            
+            <!-- 안내 툴팁 (가상) -->
+            <div class="absolute bottom-6 bg-gray-800/80 px-4 py-2 rounded-full text-sm text-gray-300 backdrop-blur pointer-events-none">
+                좌측 요소들에 마우스를 올리거나 클릭해보세요
+            </div>
+        </div>
+
+        <!-- 우측: 정보 및 컨트롤 패널 (40%) -->
+        <div class="w-full md:w-[40%] bg-gray-800 border-l border-gray-700 p-8 flex flex-col justify-center">
+            
+            <div class="bg-gray-900/50 p-8 rounded-2xl border border-gray-700 shadow-inner min-h-[400px] flex flex-col">
+                
+                <!-- 동적 텍스트 영역 -->
+                <div id="info-header" class="mb-6 border-b border-gray-700 pb-4">
+                    <h1 id="info-title" class="text-3xl font-bold text-blue-400 mb-2 transition-colors duration-300">
+                        원자로 탐험 시작
+                    </h1>
+                    <span id="info-subtitle" class="inline-block px-3 py-1 bg-gray-700 text-gray-300 text-xs rounded-full uppercase tracking-wider font-semibold">
+                        대기 상태
+                    </span>
+                </div>
+
+                <div id="info-desc" class="text-gray-300 leading-relaxed text-lg flex-grow">
+                    원자로 내부를 클릭하여 탐험해보세요.<br><br>
+                    핵연료, 제어봉, 냉각재 등 핵심 부품의 역할과 상호작용 원리를 직접 확인할 수 있습니다.
+                </div>
+
+                <!-- 동적 비주얼/컨트롤 영역 (JS로 토글됨) -->
+                <div id="dynamic-content" class="mt-8 h-32 flex flex-col justify-end">
+                    
+                    <!-- 1. 제어봉 슬라이더 (기본 숨김) -->
+                    <div id="control-slider-ui" class="hidden w-full bg-gray-800 p-5 rounded-xl border border-gray-600 shadow-lg relative">
+                        <div class="flex justify-between text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wider">
+                            <span class="text-blue-300">삽입 (정지/냉각)</span>
+                            <span class="text-red-400">인출 (과출력 위험)</span>
+                        </div>
+                        <input type="range" id="rod-slider" min="0" max="100" value="50" class="w-full">
+                        <div class="text-center mt-3 text-sm text-gray-300">
+                            상태: <span id="power-level" class="font-bold text-orange-400 ml-1">50%</span>
+                        </div>
+                        <!-- 동적 경고 메시지 영역 -->
+                        <div id="status-message" class="absolute -top-10 left-0 w-full text-center text-sm font-bold"></div>
+                    </div>
+
+                    <!-- 2. 핵연료 펠렛 비주얼 (기본 숨김) -->
+                    <div id="fuel-visual-ui" class="hidden w-full flex justify-center items-end gap-3">
+                        <div class="flex flex-col items-center gap-1">
+                            <div class="pellet w-10 h-14 rounded-md border-2 border-gray-500 relative overflow-hidden" style="animation-delay: 0s;">
+                                <div class="absolute inset-0 bg-green-500/20"></div>
+                            </div>
+                            <span class="text-xs text-gray-500 mt-2">우라늄-235</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1">
+                            <div class="pellet w-10 h-14 rounded-md border-2 border-gray-500 relative overflow-hidden" style="animation-delay: 0.5s;">
+                                <div class="absolute inset-0 bg-green-500/20"></div>
+                            </div>
+                            <span class="text-xs text-green-400 font-bold mt-2 animate-pulse">핵분열 중</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1">
+                            <div class="pellet w-10 h-14 rounded-md border-2 border-gray-500 relative overflow-hidden" style="animation-delay: 1s;">
+                                <div class="absolute inset-0 bg-green-500/20"></div>
+                            </div>
+                            <span class="text-xs text-gray-500 mt-2">우라늄 펠렛</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 로직 스크립트 -->
+    <script>
+        // DOM 요소 가져오기
+        const parts = {
+            fuel: document.getElementById('part-fuel'),
+            control: document.getElementById('part-control'),
+            coolant: document.getElementById('part-coolant'),
+            hotleg: document.getElementById('part-hotleg')
+        };
+        const rcpParts = [document.getElementById('part-rcp-front'), document.getElementById('part-rcp-back')];
+        
+        const ui = {
+            title: document.getElementById('info-title'),
+            subtitle: document.getElementById('info-subtitle'),
+            desc: document.getElementById('info-desc'),
+            controlUI: document.getElementById('control-slider-ui'),
+            fuelUI: document.getElementById('fuel-visual-ui'),
+            slider: document.getElementById('rod-slider'),
+            powerLevel: document.getElementById('power-level'),
+            statusMessage: document.getElementById('status-message'),
+            mainContainer: document.getElementById('main-container')
+        };
+
+        const animData = {
+            movableRods: document.getElementById('control-rods-movable'),
+            heatGlow: document.getElementById('heat-glow'),
+            impellers: document.querySelectorAll('.impeller'),
+            flowArrows: document.querySelectorAll('.flow-arrow')
+        };
+
+        // 데이터베이스 
+        const infoData = {
+            fuel: {
+                title: "핵연료 집합체",
+                subtitle: "[우라늄 펠렛이 에너지를 생산하는 곳]",
+                desc: "우라늄 펠렛들이 모여 핵분열 연쇄반응을 일으키는 핵심 구역입니다.<br><br>중성자가 우라늄 원자핵과 충돌하여 쪼개질 때 막대한 <b>열 에너지(Heat)</b>가 방출되며, 이 열이 냉각재를 끓여 터빈을 돌리는 증기를 만듭니다.",
+                color: "text-orange-400",
+                showUI: 'fuel'
+            },
+            control: {
+                title: "제어봉 (Control Rods)",
+                subtitle: "안전장치 및 출력 조절의 핵심",
+                desc: "붕소(Boron)나 카드뮴 등 <b>중성자를 잘 흡수하는 물질</b>로 만들어집니다.<br><br>제어봉을 노심 안으로 밀어 넣으면 중성자를 흡수해 연쇄반응이 억제되고 열이 감소합니다. 반대로 뽑아 올리면 반응이 활발해집니다.<br><br><span class='text-blue-300'>👇 아래 슬라이더를 움직여 온도를 조절해 보세요.</span>",
+                color: "text-gray-300",
+                showUI: 'control'
+            },
+            coolant: {
+                title: "냉각재 (Coolant / 감속재)",
+                subtitle: "열 전달과 반응 속도 조절",
+                desc: "가압경수형 원자로에서는 <b>순수한 물(경수)</b>을 냉각재로 사용합니다.<br><br>핵분열로 뜨거워진 핵연료의 열을 흡수하여 증기발생기로 전달하는 역할을 하며, 동시에 고속 중성자의 속도를 늦춰 핵분열이 더 잘 일어나게 돕는 <b>감속재</b> 역할도 수행합니다.",
+                color: "text-blue-400",
+                showUI: 'none'
+            },
+            rcp: {
+                title: "저온관 & 냉각재 펌프 (RCP)",
+                subtitle: "한국 표준형 원전: 4개의 저온관(Cold Leg)",
+                desc: "한국 표준형 원전(APR1400 등)은 <b>총 4대의 냉각재 펌프(RCP)와 4개의 저온관</b>을 갖추고 있습니다.<br><br>증기발생기에서 열을 빼앗기고 식은 냉각재가 4개의 입구를 통해 원자로 노심으로 강력하게 압입(압력을 높여 밀어 넣음)되며, 다중화된 펌프를 통해 안전성을 극대화합니다.",
+                color: "text-blue-300",
+                showUI: 'none'
+            },
+            hotleg: {
+                title: "고온관 (Hot Leg)",
+                subtitle: "한국 표준형 원전: 2개의 고온관(Hot Leg)",
+                desc: "노심을 통과하며 <b>약 320°C의 고온</b>으로 가열된 냉각재가 빠져나가는 <b>2개의 대형 출구 배관</b>입니다.<br><br>2개의 루프(Loop)로 나뉘어 각각의 증기발생기로 뜨거운 물을 전달합니다. 고온관이 저온관보다 직경이 커서 한 번에 많은 양의 열에너지를 효율적으로 이송합니다.",
+                color: "text-red-400",
+                showUI: 'none'
+            }
+        };
+
+        let currentSelection = null;
+
+        // 클릭 이벤트 핸들러
+        function selectPart(partName) {
+            // 시각적 선택 상태 초기화
+            Object.values(parts).forEach(el => el.classList.remove('selected'));
+            rcpParts.forEach(el => el.classList.remove('selected'));
+            
+            // UI 숨김 초기화
+            ui.controlUI.classList.add('hidden');
+            ui.fuelUI.classList.add('hidden');
+
+            // 새 파트 선택
+            currentSelection = partName;
+            
+            if (partName === 'rcp') {
+                rcpParts.forEach(el => el.classList.add('selected'));
+            } else if (parts[partName]) {
+                parts[partName].classList.add('selected');
+            }
+
+            // 정보 업데이트
+            const data = infoData[partName];
+            ui.title.className = `text-3xl font-bold mb-2 transition-colors duration-300 ${data.color}`;
+            ui.title.innerHTML = data.title;
+            ui.subtitle.innerHTML = data.subtitle;
+            ui.desc.innerHTML = data.desc;
+
+            // 특정 UI 활성화
+            if(data.showUI === 'control') {
+                ui.controlUI.classList.remove('hidden');
+            } else if (data.showUI === 'fuel') {
+                ui.fuelUI.classList.remove('hidden');
+            }
+        }
+
+        // 제어봉 슬라이더 로직
+        // value: 0 (완전 삽입/저출력) ~ 100 (완전 인출/고출력)
+        ui.slider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            
+            // 1. 가상 온도 계산 및 텍스트 업데이트
+            const temp = 100 + (val * 3); // 100도 ~ 400도
+            ui.powerLevel.innerHTML = `출력 <span class="text-white">${val}%</span> | 코어 온도: <span class="text-white">${temp}°C</span>`;
+            
+            // 2. SVG 제어봉 위치 조정 
+            // 0일때 노심 깊숙이(+200), 100일때 노심 밖으로 완전히 인출(-130)
+            const translateY = 200 - (val * 3.3);
+            animData.movableRods.style.transform = `translateY(${translateY}px)`;
+
+            // 3. 에너지(열) 시각화 조정
+            // 투명도: 출력에 비례 (완전 삽입 시 불빛 거의 꺼짐 0.05 ~ 1)
+            const opacity = 0.05 + (val / 100) * 0.95;
+            animData.heatGlow.style.opacity = opacity;
+
+            // 4. 애니메이션 맥동 속도 조정
+            if (val === 0) {
+                animData.heatGlow.style.animationDuration = `0s`; // 정지
+            } else {
+                const duration = 4 - (val / 100) * 3.5;
+                animData.heatGlow.style.animationDuration = `${duration}s`;
+            }
+
+            // RCP 펌프 속도 및 배관 유량 조절
+            // RCP 펌프 속도 및 6개 배관 유량 일괄 조절
+            const flowSpeed = 2.5 - (val / 100) * 1.5; // 1s (고출력) ~ 2.5s (저출력)
+            const spinSpeed = 1.2 - (val / 100) * 0.9; // 0.3s (고출력) ~ 1.2s (저출력)
+            
+            animData.impellers.forEach(el => el.style.animationDuration = `${spinSpeed}s`);
+            animData.flowArrows.forEach(el => el.style.animationDuration = `${flowSpeed}s`);
+            
+            // 5. 색상 동적 변경 및 인터랙티브 경고 효과
+            // 상태 초기화
+            ui.mainContainer.classList.remove('danger-shake');
+            ui.statusMessage.innerHTML = '';
+            
+            if(val > 85) {
+                ui.powerLevel.className = "font-bold text-red-500 animate-pulse ml-1";
+                ui.mainContainer.classList.add('danger-shake');
+                ui.statusMessage.innerHTML = '<span class="text-red-500 animate-pulse">⚠️ 과출력 경고: 멜트다운 위험! 즉시 제어봉을 삽입하세요.</span>';
+            } else if(val === 0) {
+                ui.powerLevel.className = "font-bold text-blue-300 ml-1";
+                ui.statusMessage.innerHTML = '<span class="text-blue-400">❄️ 원자로 안전 정지 (Cold Shutdown)</span>';
+            } else if(val > 40) {
+                ui.powerLevel.className = "font-bold text-orange-400 ml-1";
+            } else {
+                ui.powerLevel.className = "font-bold text-blue-400 ml-1";
+            }
+        });
+
+        // 초기 애니메이션 설정
+        window.addEventListener('DOMContentLoaded', () => {
+            // 슬라이더 초기값(50%)에 맞게 설정
+            ui.slider.dispatchEvent(new Event('input'));
+        });
+
+    </script>
+</body>
+</html>
